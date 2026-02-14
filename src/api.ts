@@ -221,6 +221,40 @@ export async function markAsRead(
 }
 
 // ---------------------------------------------------------------------------
+// Typing indicators
+// ---------------------------------------------------------------------------
+
+/**
+ * Show a "typing..." indicator to the user.
+ * The indicator is automatically removed when you send a reply or after 25s.
+ * Requires the message_id of the received message to attach to.
+ */
+export async function sendTypingIndicator(
+  config: WhatsAppCloudConfig,
+  messageId: string,
+  log: Logger
+): Promise<void> {
+  const url = apiUrl(config, `${config.phoneNumberId}/messages`);
+
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: headers(config),
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: messageId,
+        typing_indicator: {
+          type: "text",
+        },
+      }),
+    });
+  } catch (err) {
+    log.debug?.(`[whatsapp-cloud] Failed to send typing indicator: ${err}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Media download (for receiving media from users)
 // ---------------------------------------------------------------------------
 

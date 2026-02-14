@@ -1,5 +1,6 @@
 {
   "id": "whatsapp-cloud",
+  "channels": ["whatsapp-cloud"],
   "name": "WhatsApp Cloud API",
   "version": "0.1.0",
   "description": "WhatsApp channel using Meta's official Cloud API. Production-safe for business use — no Baileys, no ban risk.",
@@ -67,7 +68,7 @@
         "description": "Automatically mark incoming messages as read"
       }
     },
-    "required": ["phoneNumberId", "accessToken"]
+    "required": []
   },
   "uiHints": {
     "phoneNumberId": { "label": "Phone Number ID", "placeholder": "123456789012345" },

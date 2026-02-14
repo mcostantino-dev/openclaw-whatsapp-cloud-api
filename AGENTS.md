@@ -20,7 +20,7 @@ Meta Cloud API (graph.facebook.com)
 │  crypto.ts (HMAC verify)    │  ← Validates X-Hub-Signature-256
 │         │                   │
 │         ▼                   │
-│  index.ts (channel plugin)  │  ← Dispatches to OpenClaw session via ctx.dispatch()
+│  index.ts (channel plugin)  │  ← Dispatches via runtime.channel.reply.dispatch...()
 │         │                   │
 │         ▼                   │
 │  api.ts (outbound client)   │  ← Sends replies via Meta API
@@ -32,7 +32,9 @@ Meta Cloud API → User's WhatsApp
 
 ## Key files
 
-- `src/index.ts` — Plugin entry point. Exports `register(api)` function that calls `api.registerChannel()`. Contains the channel definition with meta, capabilities, config, outbound, gateway lifecycle, and **setup wizard**.
+- `src/index.ts` — Plugin entry point. Exports `{ id, name, register(api) }` that calls `api.registerChannel()`. Contains the full channel definition with meta, capabilities, config, security, pairing, setup, outbound, gateway lifecycle, and status adapters. Also registers CLI commands (setup/status/test).
+- `src/runtime.ts` — Stores the `PluginRuntime` reference provided by OpenClaw at load time. Used by all modules for dispatch and config access.
+- `src/setup.ts` — Interactive setup wizard (6 steps: phoneNumberId, businessAccountId, accessToken, appSecret, verifyToken, webhookPort).
 - `src/api.ts` — Meta Cloud API client. Handles all outbound: text, templates, interactive buttons/lists, media, read receipts, media download.
 - `src/webhook.ts` — HTTP server. Handles GET (Meta verification challenge) and POST (inbound messages). Parses all message types. Access control via allowlist.
 - `src/crypto.ts` — HMAC-SHA256 webhook signature verification with timing-safe comparison.
@@ -42,16 +44,18 @@ Meta Cloud API → User's WhatsApp
 
 ## Plugin API contract
 
-This plugin follows the OpenClaw channel plugin contract documented at:
-https://docs.openclaw.ai/tools/plugin
+This plugin follows the OpenClaw channel plugin contract.
 
 Key interfaces used:
-- `api.registerChannel({ plugin })` — registers the channel
-- `api.registerCli(fn, { commands })` — registers CLI commands (for setup wizard)
-- Channel plugin shape: `{ id, meta, capabilities, config, outbound, gateway, security, status, setup }`
-- `outbound.sendText({ text, peer, config, log })` — send a message
-- `gateway.start(ctx)` — called when Gateway starts; ctx has dispatch, config, log
-- `ctx.dispatch({ channel, peer, text, ... })` — route inbound message to agent session
+- `api.registerChannel({ plugin })` — registers the channel with OpenClaw
+- `api.registerCli(fn, { commands })` — registers CLI commands (setup/status/test)
+- `api.runtime` — `PluginRuntime` for config access and message dispatch
+- Channel plugin shape: `{ id, meta, capabilities, config, security, pairing, setup, outbound, gateway, status }`
+- `outbound.sendText({ cfg, to, text, accountId })` — send a message, returns `OutboundDeliveryResult`
+- `gateway.startAccount(ctx)` — called when Gateway starts; ctx has `account`, `cfg`, `runtime`, `abortSignal`, `log`, `setStatus`
+- `runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({ ctx: MsgContext, cfg, dispatcherOptions })` — route inbound message to agent session
+- `MsgContext` fields: `Body`, `From`, `To`, `SessionKey`, `AccountId`, `MessageSid`, `Provider`, `OriginatingChannel`, etc.
+- `dispatcherOptions.deliver(payload)` — callback that sends the agent's reply back to WhatsApp
 
 ## Reference implementations
 
@@ -59,47 +63,39 @@ Key interfaces used:
 - OpenClaw China pack: https://github.com/BytePioneer-AI/moltbot-china (multi-channel)
 - Built-in Telegram channel (in OpenClaw core) is the canonical reference
 
-## What needs work
+## Status
 
-### 1. Setup wizard (PRIORITY)
-The plugin needs an interactive setup flow so that when a user runs `openclaw channels login whatsapp-cloud` or goes through onboarding, it prompts for:
-- Phone Number ID (from Meta Business dashboard)
-- Access Token (System User token)
-- App Secret (for webhook signature verification)
-- Verify Token (user chooses a random string)
-- Webhook Port (default 3100)
+All core features are implemented and working:
+- Setup wizard (`openclaw whatsapp-cloud setup`)
+- Gateway lifecycle (`gateway.startAccount` with proper dispatch)
+- Inbound message dispatch via `runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher()`
+- Outbound text and media via Meta Cloud API
+- Webhook signature verification
+- DM policy (open / allowlist)
+- CLI commands: setup, status, test
 
-Look at how the DingTalk plugin and built-in Telegram channel handle their setup wizards. The setup adapter should use `api.registerCli` or the `setup` property on the channel plugin.
+## Future improvements
 
-### 2. Verify dispatch() signature
-The `ctx.dispatch()` call in `gateway.start` may need adjustment based on the actual OpenClaw version. Test with `openclaw plugins install -l .` and send a real WhatsApp message. Check gateway logs for errors. The dispatch payload shape should match what other channels send.
-
-### 3. Webhook exposure guidance  
-After setup, the plugin should tell the user:
-- Their webhook URL format: `https://<your-domain>/webhook/whatsapp-cloud`
-- How to expose it (ngrok for dev, Cloudflare Tunnel for prod)
-- How to register it in Meta's dashboard
-- The webhook server is ALREADY built into the plugin (webhook.ts) — no external server needed
-
-### 4. Account-based config
-Currently uses a single "default" account. Consider supporting multi-account config like:
+### 1. Multi-account support
+Currently uses a single "default" account. Could support multiple WhatsApp numbers:
 ```json
 {
   "channels": {
     "whatsapp-cloud": {
       "accounts": {
-        "padelink": { "phoneNumberId": "...", "accessToken": "..." },
-        "support": { "phoneNumberId": "...", "accessToken": "..." }
+        "support": { "phoneNumberId": "...", "accessToken": "..." },
+        "sales": { "phoneNumberId": "...", "accessToken": "..." }
       }
     }
   }
 }
 ```
 
-### 5. Streaming support
-OpenClaw supports streaming responses (typing indicator → progressive text). The WhatsApp Cloud API doesn't support true streaming, but we could:
-- Send a "typing" indicator via the Presence API while the agent thinks
-- Deliver the response as a single message when complete
+### 2. Typing indicators
+Send a "typing" status while the agent generates a response.
+
+### 3. Template message support in outbound
+Allow the agent to send pre-approved template messages for proactive notifications.
 
 ## Testing
 

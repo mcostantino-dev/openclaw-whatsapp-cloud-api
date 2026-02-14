@@ -8,6 +8,7 @@
 // Guides the user through Meta Business API configuration step by step.
 // ---------------------------------------------------------------------------
 
+import { createInterface } from "node:readline";
 import type { WhatsAppCloudConfig, Logger } from "./types.js";
 import { CONFIG_DEFAULTS } from "./types.js";
 
@@ -24,10 +25,9 @@ interface Prompter {
  * prompter is not available (e.g., direct CLI invocation).
  */
 function createReadlinePrompter(): Prompter {
-  const readline = require("node:readline");
 
   async function ask(question: string, hide: boolean = false): Promise<string> {
-    const rl = readline.createInterface({
+    const rl = createInterface({
       input: process.stdin,
       output: process.stdout,
     });
