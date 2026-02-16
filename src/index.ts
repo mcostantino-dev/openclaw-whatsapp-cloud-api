@@ -481,7 +481,7 @@ const whatsappCloudChannel = {
 // ---------------------------------------------------------------------------
 
 const plugin = {
-  id: "whatsapp-cloud",
+  id: "openclaw-whatsapp-cloud-api",
   name: "WhatsApp Cloud API",
   description: "WhatsApp Cloud API channel plugin — official Meta Business API, no Baileys",
 

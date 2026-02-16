@@ -1,5 +1,5 @@
 {
-  "id": "whatsapp-cloud",
+  "id": "openclaw-whatsapp-cloud-api",
   "channels": ["whatsapp-cloud"],
   "name": "WhatsApp Cloud API",
   "version": "0.1.0",
