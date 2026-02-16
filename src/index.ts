@@ -13,6 +13,7 @@ import type { Server } from "node:http";
 import { sendText, sendMedia, sendTypingIndicator } from "./api.js";
 import { startWebhookServer } from "./webhook.js";
 import { runSetupWizard, validateConfig } from "./setup.js";
+import { whatsappCloudOnboardingAdapter } from "./onboarding.js";
 import type { WhatsAppCloudConfig, Logger } from "./types.js";
 import { CONFIG_DEFAULTS } from "./types.js";
 import { setWhatsAppCloudRuntime, getWhatsAppCloudRuntime } from "./runtime.js";
@@ -90,6 +91,8 @@ const whatsappCloudChannel = {
     preferOver: ["whatsapp"],
     quickstartAllowFrom: true,
   },
+
+  onboarding: whatsappCloudOnboardingAdapter,
 
   capabilities: {
     chatTypes: ["direct"] as Array<"direct">,
@@ -630,3 +633,4 @@ export { markAsRead, sendTypingIndicator, getMediaUrl, downloadMedia } from "./a
 export { runSetupWizard, validateConfig } from "./setup.js";
 export type { WhatsAppCloudConfig } from "./types.js";
 export type { ParsedInboundMessage, ParsedInboundMessage as InboundMessage } from "./webhook.js";
+export { whatsappCloudOnboardingAdapter } from "./onboarding.js";

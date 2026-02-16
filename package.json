@@ -1,9 +1,16 @@
 {
-  "name": "@baia-digitale/whatsapp-cloud",
-  "version": "0.1.0",
+  "name": "openclaw-whatsapp-cloud-api",
+  "version": "1.0.0",
   "description": "WhatsApp Cloud API channel plugin for OpenClaw — official Meta Business API, no Baileys",
   "type": "module",
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "!src/__tests__",
+    "openclaw.plugin.json"
+  ],
   "openclaw": {
     "extensions": ["./src/index.ts"],
     "channel": {
@@ -17,7 +24,7 @@
       "aliases": ["wa-cloud", "whatsapp-business", "wa-business"]
     },
     "install": {
-      "npmSpec": "@baia-digitale/openclaw-channel-whatsapp-cloud",
+      "npmSpec": "openclaw-whatsapp-cloud-api",
       "localPath": "extensions/whatsapp-cloud",
       "defaultChoice": "npm"
     }
@@ -28,7 +35,8 @@
     "type-check": "tsc --noEmit",
     "lint": "eslint src/ --ext .ts",
     "lint:fix": "eslint src/ --ext .ts --fix",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "openclaw",
@@ -40,11 +48,11 @@
     "chatbot",
     "business-api"
   ],
-  "author": "Marco <marco@baiadigitale.com>",
+  "author": "Marco Costantino",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/baiadigitale/openclaw-channel-whatsapp-cloud.git"
+    "url": "https://github.com/mcostantino-dev/openclaw-whatsapp-cloud-api"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
