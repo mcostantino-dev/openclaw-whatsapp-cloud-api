@@ -195,14 +195,36 @@ export async function runSetupWizard(
   console.log(`  Webhook Path:       /webhook/whatsapp-cloud`);
   console.log("═".repeat(60));
 
-  console.log("\n📋 Next steps after saving config:");
-  console.log("  1. Expose port " + webhookPort + " over HTTPS:");
-  console.log("     • Dev:  ngrok http " + webhookPort);
-  console.log("     • Prod: cloudflared tunnel --url http://localhost:" + webhookPort);
-  console.log("  2. Register the webhook in Meta dashboard:");
-  console.log("     • URL: https://<your-domain>/webhook/whatsapp-cloud");
-  console.log("     • Verify Token: " + verifyToken);
-  console.log("     • Subscribe to: messages");
+  // Ask for webhook base URL
+  logger.info("Webhook URL (optional)");
+  console.log(
+    "  💡 If you already have ngrok running or a public domain, enter the base URL.\n" +
+      "     Otherwise press Enter to skip — you can configure it later."
+  );
+  const webhookBaseUrl = await prompt.input(
+    "Public HTTPS base URL (e.g. https://xxxx.ngrok-free.app)",
+    { default: "" }
+  );
+
+  const trimmedBaseUrl = webhookBaseUrl.trim().replace(/\/+$/, "");
+  if (trimmedBaseUrl && trimmedBaseUrl.startsWith("https://")) {
+    const callbackUrl = `${trimmedBaseUrl}/webhook/whatsapp-cloud`;
+    console.log("\n📋 Copy-paste these into Meta → WhatsApp → Configuration → Webhook → Edit:");
+    console.log("═".repeat(60));
+    console.log(`  Callback URL:  ${callbackUrl}`);
+    console.log(`  Verify Token:  ${verifyToken}`);
+    console.log("═".repeat(60));
+    console.log("  Then click \"Verify and Save\" and subscribe to: messages");
+  } else {
+    console.log("\n📋 Next steps after saving config:");
+    console.log("  1. Expose port " + webhookPort + " over HTTPS:");
+    console.log("     • Dev:  ngrok http " + webhookPort);
+    console.log("     • Prod: cloudflared tunnel --url http://localhost:" + webhookPort);
+    console.log("  2. Register the webhook in Meta dashboard:");
+    console.log("     • URL: https://<your-domain>/webhook/whatsapp-cloud");
+    console.log("     • Verify Token: " + verifyToken);
+    console.log("     • Subscribe to: messages");
+  }
   console.log("  3. Restart the gateway: openclaw gateway restart");
   console.log("  4. Send a WhatsApp message to your business number!");
 

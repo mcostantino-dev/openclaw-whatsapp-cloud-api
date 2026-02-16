@@ -257,29 +257,65 @@ async function promptCredentials(params: {
 }
 
 // ---------------------------------------------------------------------------
-// Webhook setup instructions (shown after credentials are saved)
+// Webhook URL prompting + Meta dashboard instructions
 // ---------------------------------------------------------------------------
 
-async function noteWebhookSetup(prompter: WizardPrompter, verifyToken: string, webhookPort: number): Promise<void> {
-  await prompter.note(
-    [
-      "Now configure the webhook in Meta's dashboard:",
-      "",
-      "1. Go to: Meta Developers → Your App → WhatsApp → Configuration",
-      "2. Under Webhook, click Edit",
-      `3. Callback URL: https://<your-domain>/webhook/whatsapp-cloud`,
-      `4. Verify Token: ${verifyToken}`,
-      "5. Click \"Verify and Save\"",
-      "6. Subscribe to field: messages",
-      "",
-      "For local development, expose the port first:",
-      `  ngrok http ${webhookPort}`,
-      "",
-      "For production, use a reverse proxy (Caddy, nginx) to",
-      `forward HTTPS traffic to http://localhost:${webhookPort}`,
-    ].join("\n"),
-    "Webhook Configuration (required)",
-  );
+async function promptWebhookUrl(params: {
+  prompter: WizardPrompter;
+  verifyToken: string;
+  webhookPort: number;
+}): Promise<void> {
+  const { prompter, verifyToken, webhookPort } = params;
+  const webhookPath = CONFIG_DEFAULTS.webhookPath!;
+
+  const baseUrl = await prompter.text({
+    message: "Your public HTTPS base URL (ngrok, Cloudflare, or your domain)",
+    placeholder: `https://xxxx.ngrok-free.app`,
+    validate: (v) => {
+      const val = String(v ?? "").trim();
+      if (!val) return undefined; // allow skip
+      if (!val.startsWith("https://")) return "Must start with https://";
+      return undefined;
+    },
+  });
+
+  const trimmedUrl = String(baseUrl).trim().replace(/\/+$/, "");
+
+  if (trimmedUrl && trimmedUrl.startsWith("https://")) {
+    const callbackUrl = `${trimmedUrl}${webhookPath}`;
+    await prompter.note(
+      [
+        "Copy-paste these into Meta Developers → Your App →",
+        "WhatsApp → Configuration → Webhook → Edit:",
+        "",
+        `  Callback URL:  ${callbackUrl}`,
+        `  Verify Token:  ${verifyToken}`,
+        "",
+        "Then click \"Verify and Save\" and subscribe to: messages",
+      ].join("\n"),
+      "Webhook — ready to paste in Meta",
+    );
+  } else {
+    await prompter.note(
+      [
+        "Configure the webhook in Meta's dashboard:",
+        "",
+        "1. Go to: Meta Developers → Your App → WhatsApp → Configuration",
+        "2. Under Webhook, click Edit",
+        `3. Callback URL: https://<your-domain>${webhookPath}`,
+        `4. Verify Token: ${verifyToken}`,
+        "5. Click \"Verify and Save\"",
+        "6. Subscribe to field: messages",
+        "",
+        "For local development, expose the port first:",
+        `  ngrok http ${webhookPort}`,
+        "",
+        "For production, use a reverse proxy (Caddy, nginx) to",
+        `forward HTTPS traffic to http://localhost:${webhookPort}`,
+      ].join("\n"),
+      "Webhook Configuration (required)",
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +348,7 @@ export const whatsappCloudOnboardingAdapter = {
     const verifyToken = saved.verifyToken || "openclaw-wa-verify";
     const webhookPort = saved.webhookPort || 3100;
 
-    await noteWebhookSetup(prompter, verifyToken, webhookPort);
+    await promptWebhookUrl({ prompter, verifyToken, webhookPort });
 
     if (!String(saved.appSecret ?? "").trim()) {
       await prompter.note(
