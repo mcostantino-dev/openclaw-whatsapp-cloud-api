@@ -1,6 +1,6 @@
 {
   "name": "openclaw-whatsapp-cloud-api",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "WhatsApp Cloud API channel plugin for OpenClaw — official Meta Business API, no Baileys",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,7 +12,9 @@
     "openclaw.plugin.json"
   ],
   "openclaw": {
-    "extensions": ["./src/index.ts"],
+    "extensions": [
+      "./src/index.ts"
+    ],
     "channel": {
       "id": "whatsapp-cloud",
       "label": "WhatsApp Cloud API",
@@ -21,7 +23,11 @@
       "docsLabel": "whatsapp-cloud",
       "blurb": "WhatsApp channel via Meta's official Cloud API. Production-safe, no ban risk.",
       "order": 20,
-      "aliases": ["wa-cloud", "whatsapp-business", "wa-business"]
+      "aliases": [
+        "wa-cloud",
+        "whatsapp-business",
+        "wa-business"
+      ]
     },
     "install": {
       "npmSpec": "openclaw-whatsapp-cloud-api",
