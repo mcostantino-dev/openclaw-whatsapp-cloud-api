@@ -399,7 +399,7 @@ const plugin = {
             return;
         }
         globalThis.__whatsappCloudApiRegistered = true;
-        log.info("[whatsapp-cloud] Loading WhatsApp Cloud API channel plugin");
+        log.debug?.("[whatsapp-cloud] Loading WhatsApp Cloud API channel plugin");
         // Store runtime reference for dispatch and config access
         setWhatsAppCloudRuntime(api.runtime);
         // Register the channel
@@ -515,7 +515,7 @@ const plugin = {
                 });
             }, { commands: ["whatsapp-cloud"] });
         }
-        log.info("[whatsapp-cloud] Plugin registered");
+        log.debug?.("[whatsapp-cloud] Plugin registered");
     },
 };
 export default plugin;
