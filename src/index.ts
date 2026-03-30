@@ -487,7 +487,16 @@ const plugin = {
 
   register(api: any) {
     const log: Logger = api.logger ?? (console as unknown as Logger);
-    log.info("[whatsapp-cloud] Loading WhatsApp Cloud API channel plugin");
+
+    // Guard against OpenClaw gateway loading the plugin multiple times
+    // See: https://github.com/openclaw/openclaw/issues/55147
+    if ((globalThis as any).__whatsappCloudApiRegistered) {
+      log.debug?.("[whatsapp-cloud] Already registered, skipping duplicate load");
+      return;
+    }
+    (globalThis as any).__whatsappCloudApiRegistered = true;
+
+    log.debug?.("[whatsapp-cloud] Loading WhatsApp Cloud API channel plugin");
 
     // Store runtime reference for dispatch and config access
     setWhatsAppCloudRuntime(api.runtime);
@@ -618,7 +627,7 @@ const plugin = {
       );
     }
 
-    log.info("[whatsapp-cloud] Plugin registered");
+    log.debug?.("[whatsapp-cloud] Plugin registered");
   },
 };
 
