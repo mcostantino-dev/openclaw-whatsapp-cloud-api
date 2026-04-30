@@ -98,6 +98,7 @@ const whatsappCloudChannel = {
     chatTypes: ["direct"] as Array<"direct">,
     media: true,
     blockStreaming: true,
+    nativeCommands: true,
   },
 
   reload: { configPrefixes: ["channels.whatsapp-cloud"] },
@@ -397,6 +398,21 @@ const whatsappCloudChannel = {
           lastStartAt: Date.now(),
           mode: "webhook",
         });
+      }
+
+      // PATCH (openclaw-infra): keep startAccount alive until shutdown.
+      // OpenClaw gateway interprets early resolve as "channel ended" and
+      // schedules auto-restart -> EADDRINUSE on port 3100. Block until
+      // abortSignal fires, then close the webhook server cleanly.
+      await new Promise<void>((resolve) => {
+        const sig = (ctx as any).abortSignal;
+        if (!sig) return;
+        if (sig.aborted) { resolve(); return; }
+        sig.addEventListener("abort", () => resolve(), { once: true });
+      });
+      if (webhookServer) {
+        try { webhookServer.close(); } catch (_) {}
+        webhookServer = null;
       }
     },
 
