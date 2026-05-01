@@ -10,7 +10,14 @@
 // ---------------------------------------------------------------------------
 
 import type { Server } from "node:http";
-import { sendText, sendMedia, sendTypingIndicator } from "./api.js";
+import {
+  sendText,
+  sendMedia,
+  sendTypingIndicator,
+  uploadMediaFromPath,
+  isHttpUrl,
+  guessMimeFromPath,
+} from "./api.js";
 import { startWebhookServer } from "./webhook.js";
 import { runSetupWizard, validateConfig } from "./setup.js";
 import { whatsappCloudOnboardingAdapter } from "./onboarding.js";
@@ -36,6 +43,28 @@ let webhookServer: Server | null = null;
 
 // Default account ID constant (matches OpenClaw convention)
 const DEFAULT_ACCOUNT_ID = "default";
+
+// ---------------------------------------------------------------------------
+// Debug helper
+//
+// trace() emits at log.debug normally (only visible when the OpenClaw gateway
+// is at debug log level) but escalates to log.info when WHATSAPP_CLOUD_DEBUG=1
+// is set in the environment. This lets operators turn on plugin-specific
+// verbose traces in prod without raising the global gateway log level.
+// ---------------------------------------------------------------------------
+
+const WACLOUD_DEBUG = (() => {
+  const v = (process.env.WHATSAPP_CLOUD_DEBUG ?? "").toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+})();
+
+function trace(log: Logger, message: string): void {
+  if (WACLOUD_DEBUG) {
+    log.info?.(message);
+  } else {
+    log.debug?.(message);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Config resolution
@@ -98,6 +127,7 @@ const whatsappCloudChannel = {
     chatTypes: ["direct"] as Array<"direct">,
     media: true,
     blockStreaming: true,
+    nativeCommands: true,
   },
 
   reload: { configPrefixes: ["channels.whatsapp-cloud"] },
@@ -262,7 +292,24 @@ const whatsappCloudChannel = {
       }
 
       if (mediaUrl) {
-        const result = await sendMedia(config, to, "image", { link: mediaUrl, caption: text || undefined }, log);
+        // Same logic as the inbound deliver callback: HTTP(S) URLs use
+        // {link} (Meta fetches them); local filesystem paths must be
+        // uploaded to /media first to obtain a media_id, then sent via
+        // {id}. Otherwise Meta rejects with "(#100) Param image.link is
+        // not a valid URI".
+        const usesUpload = !isHttpUrl(mediaUrl);
+        trace(log, `[whatsapp-cloud] outbound.sendMedia to=${to} mediaUrl=${mediaUrl} mode=${usesUpload ? "upload" : "link"}`);
+        let mediaArg: { link?: string; id?: string; caption?: string };
+        if (usesUpload) {
+          const mime = guessMimeFromPath(mediaUrl);
+          const id = await uploadMediaFromPath(config, mediaUrl, mime, log);
+          trace(log, `[whatsapp-cloud] outbound.sendMedia uploaded ${mediaUrl} (${mime}) -> media_id=${id}`);
+          mediaArg = { id, caption: text || undefined };
+        } else {
+          mediaArg = { link: mediaUrl, caption: text || undefined };
+        }
+        const result = await sendMedia(config, to, "image", mediaArg, log);
+        trace(log, `[whatsapp-cloud] outbound.sendMedia result ok=${result.ok} messageId=${result.messageId ?? "n/a"}${result.ok ? "" : " error=" + result.error}`);
         if (!result.ok) {
           throw new Error(`WhatsApp Cloud API media send failed: ${result.error}`);
         }
@@ -331,7 +378,16 @@ const whatsappCloudChannel = {
               CommandBody: message.text,
               BodyForCommands: message.text,
               From: message.from,
-              To: config.phoneNumberId,
+              // To is the OpenClaw "channel/chat identifier". For direct DMs
+              // in WhatsApp the conversation is identified by the user (the
+              // other party), not by the bot's phoneNumberId. If To is set to
+              // phoneNumberId, OpenClaw's `message send` tool falls back to
+              // currentChannelId (= ctx.To) as the recipient when the agent
+              // omits an explicit target → the bot ends up sending to itself
+              // and Meta rejects with #131009 ("Parameter value is not valid").
+              // ToChannel preserves the bot's id for any consumer that needs it.
+              To: message.from,
+              ToChannel: config.phoneNumberId,
               SessionKey: `whatsapp-cloud:${message.from}`,
               AccountId: account.accountId,
               MessageSid: message.messageId,
@@ -342,6 +398,13 @@ const whatsappCloudChannel = {
               OriginatingChannel: "whatsapp-cloud",
               OriginatingTo: message.from,
               Timestamp: parseInt(message.timestamp, 10) * 1000,
+              // PATCH (openclaw-infra): the webhook layer already enforced
+              // dmPolicy=allowlist against allowFrom before reaching this
+              // handler, so any sender here is authorized for native commands
+              // (/reset, /clear, /new). Without this, finalizeInboundContext
+              // forces CommandAuthorized=false and the dispatcher silently
+              // drops all slash commands.
+              CommandAuthorized: true,
             };
 
             if (message.quotedMessageId) {
@@ -357,12 +420,39 @@ const whatsappCloudChannel = {
                   if (payload.text) {
                     await sendText(config, message.from, payload.text, log);
                   }
+
+                  // sendOne dispatches a single media reference: if it's an
+                  // HTTPS URL Meta can fetch it directly via {link}; if it's
+                  // a local filesystem path we upload first to /media to get
+                  // a media_id and send via {id}. Local paths are produced
+                  // by skills like python-analysis (charts saved under
+                  // ~/.openclaw/workspace/charts/).
+                  const sendOne = async (mediaRef: string) => {
+                    const usesUpload = !isHttpUrl(mediaRef);
+                    trace(log, `[whatsapp-cloud] deliver.sendOne to=${message.from} mediaRef=${mediaRef} mode=${usesUpload ? "upload" : "link"}`);
+                    if (!usesUpload) {
+                      const r = await sendMedia(config, message.from, "image", { link: mediaRef }, log);
+                      trace(log, `[whatsapp-cloud] deliver.sendOne link result ok=${r.ok} messageId=${r.messageId ?? "n/a"}${r.ok ? "" : " error=" + r.error}`);
+                      return;
+                    }
+                    try {
+                      const mime = guessMimeFromPath(mediaRef);
+                      const id = await uploadMediaFromPath(config, mediaRef, mime, log);
+                      trace(log, `[whatsapp-cloud] deliver.sendOne uploaded ${mediaRef} (${mime}) -> media_id=${id}`);
+                      const r = await sendMedia(config, message.from, "image", { id }, log);
+                      trace(log, `[whatsapp-cloud] deliver.sendOne id result ok=${r.ok} messageId=${r.messageId ?? "n/a"}${r.ok ? "" : " error=" + r.error}`);
+                    } catch (err) {
+                      log.error?.(`[whatsapp-cloud] media send failed for "${mediaRef}": ${err}`);
+                      throw err;
+                    }
+                  };
+
                   if (payload.mediaUrl) {
-                    await sendMedia(config, message.from, "image", { link: payload.mediaUrl }, log);
+                    await sendOne(payload.mediaUrl);
                   }
                   if (payload.mediaUrls?.length) {
                     for (const url of payload.mediaUrls) {
-                      await sendMedia(config, message.from, "image", { link: url }, log);
+                      await sendOne(url);
                     }
                   }
                 },
@@ -397,6 +487,21 @@ const whatsappCloudChannel = {
           lastStartAt: Date.now(),
           mode: "webhook",
         });
+      }
+
+      // PATCH (openclaw-infra): keep startAccount alive until shutdown.
+      // OpenClaw gateway interprets early resolve as "channel ended" and
+      // schedules auto-restart -> EADDRINUSE on port 3100. Block until
+      // abortSignal fires, then close the webhook server cleanly.
+      await new Promise<void>((resolve) => {
+        const sig = (ctx as any).abortSignal;
+        if (!sig) return;
+        if (sig.aborted) { resolve(); return; }
+        sig.addEventListener("abort", () => resolve(), { once: true });
+      });
+      if (webhookServer) {
+        try { webhookServer.close(); } catch (_) {}
+        webhookServer = null;
       }
     },
 

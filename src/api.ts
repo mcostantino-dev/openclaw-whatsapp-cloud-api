@@ -195,6 +195,89 @@ export async function sendMedia(
 }
 
 // ---------------------------------------------------------------------------
+// Media upload (resumable / direct) — for sending local files
+// ---------------------------------------------------------------------------
+
+/**
+ * Upload a local file to Meta's media endpoint and return the media_id.
+ * Required for sending images/audio/video/documents that aren't already
+ * hosted on a public HTTPS URL.
+ *
+ * https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media
+ */
+export async function uploadMediaFromPath(
+  config: WhatsAppCloudConfig,
+  filePath: string,
+  mimeType: string,
+  log: Logger
+): Promise<string> {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const buf = await fs.readFile(filePath);
+  const url = apiUrl(config, `${config.phoneNumberId}/media`);
+
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("type", mimeType);
+  form.append(
+    "file",
+    new Blob([new Uint8Array(buf)], { type: mimeType }),
+    path.basename(filePath)
+  );
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.accessToken}`,
+    },
+    body: form as unknown as BodyInit,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`media upload failed: ${res.status} ${res.statusText} ${text}`);
+  }
+
+  const json = (await res.json()) as { id?: string };
+  if (!json.id) {
+    throw new Error(`media upload returned no id: ${JSON.stringify(json)}`);
+  }
+  log.debug?.(`[whatsapp-cloud] uploaded media: ${path.basename(filePath)} -> ${json.id}`);
+  return json.id;
+}
+
+/**
+ * Detect if a string is a remote URL (http/https) vs a local file path.
+ * Used by the channel deliver callback to decide between Meta's
+ * link-based send (for URLs) and id-based send (for local files).
+ */
+export function isHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
+/**
+ * Guess MIME type from file extension. Meta only accepts a fixed set of
+ * MIME types per media kind; this covers the common ones.
+ */
+export function guessMimeFromPath(filePath: string): string {
+  const ext = filePath.toLowerCase().split(".").pop();
+  switch (ext) {
+    case "png": return "image/png";
+    case "jpg":
+    case "jpeg": return "image/jpeg";
+    case "webp": return "image/webp";
+    case "gif": return "image/gif";
+    case "mp4": return "video/mp4";
+    case "3gp": return "video/3gpp";
+    case "mp3": return "audio/mpeg";
+    case "ogg": return "audio/ogg";
+    case "amr": return "audio/amr";
+    case "pdf": return "application/pdf";
+    default: return "application/octet-stream";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Read receipts
 // ---------------------------------------------------------------------------
 

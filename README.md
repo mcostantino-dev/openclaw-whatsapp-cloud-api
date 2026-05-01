@@ -458,6 +458,28 @@ New WhatsApp Business accounts start at **250 unique recipients per 24 hours**. 
 
 250 > 1,000 > 10,000 > 100,000 > unlimited
 
+## Debug logging
+
+The plugin emits verbose traces (outbound dispatch decisions, media upload
+results, send API outcomes) at `log.debug` level — visible only when the
+gateway is running at debug log level. To force-enable plugin-specific
+verbose traces in production without raising the global log level, set:
+
+```bash
+export WHATSAPP_CLOUD_DEBUG=1   # or "true" / "yes" / "on"
+```
+
+When this env var is set, `log.debug?.()` calls inside the plugin escalate
+to `log.info` so they appear in normal gateway logs. Useful for
+troubleshooting a single channel without flooding logs from other plugins.
+Restart the gateway for the change to take effect.
+
+Filter the plugin's lines with:
+
+```bash
+docker compose logs openclaw-gateway 2>&1 | grep "\[whatsapp-cloud\]"
+```
+
 ## Troubleshooting
 
 **Webhook verification fails:**
