@@ -10,7 +10,14 @@
 // ---------------------------------------------------------------------------
 
 import type { Server } from "node:http";
-import { sendText, sendMedia, sendTypingIndicator } from "./api.js";
+import {
+  sendText,
+  sendMedia,
+  sendTypingIndicator,
+  uploadMediaFromPath,
+  isHttpUrl,
+  guessMimeFromPath,
+} from "./api.js";
 import { startWebhookServer } from "./webhook.js";
 import { runSetupWizard, validateConfig } from "./setup.js";
 import { whatsappCloudOnboardingAdapter } from "./onboarding.js";
@@ -365,12 +372,34 @@ const whatsappCloudChannel = {
                   if (payload.text) {
                     await sendText(config, message.from, payload.text, log);
                   }
+
+                  // sendOne dispatches a single media reference: if it's an
+                  // HTTPS URL Meta can fetch it directly via {link}; if it's
+                  // a local filesystem path we upload first to /media to get
+                  // a media_id and send via {id}. Local paths are produced
+                  // by skills like python-analysis (charts saved under
+                  // ~/.openclaw/workspace/charts/).
+                  const sendOne = async (mediaRef: string) => {
+                    if (isHttpUrl(mediaRef)) {
+                      await sendMedia(config, message.from, "image", { link: mediaRef }, log);
+                      return;
+                    }
+                    try {
+                      const mime = guessMimeFromPath(mediaRef);
+                      const id = await uploadMediaFromPath(config, mediaRef, mime, log);
+                      await sendMedia(config, message.from, "image", { id }, log);
+                    } catch (err) {
+                      log.error?.(`[whatsapp-cloud] media send failed for "${mediaRef}": ${err}`);
+                      throw err;
+                    }
+                  };
+
                   if (payload.mediaUrl) {
-                    await sendMedia(config, message.from, "image", { link: payload.mediaUrl }, log);
+                    await sendOne(payload.mediaUrl);
                   }
                   if (payload.mediaUrls?.length) {
                     for (const url of payload.mediaUrls) {
-                      await sendMedia(config, message.from, "image", { link: url }, log);
+                      await sendOne(url);
                     }
                   }
                 },
