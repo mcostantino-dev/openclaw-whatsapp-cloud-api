@@ -343,6 +343,13 @@ const whatsappCloudChannel = {
               OriginatingChannel: "whatsapp-cloud",
               OriginatingTo: message.from,
               Timestamp: parseInt(message.timestamp, 10) * 1000,
+              // PATCH (openclaw-infra): the webhook layer already enforced
+              // dmPolicy=allowlist against allowFrom before reaching this
+              // handler, so any sender here is authorized for native commands
+              // (/reset, /clear, /new). Without this, finalizeInboundContext
+              // forces CommandAuthorized=false and the dispatcher silently
+              // drops all slash commands.
+              CommandAuthorized: true,
             };
 
             if (message.quotedMessageId) {
