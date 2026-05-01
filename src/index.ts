@@ -270,7 +270,18 @@ const whatsappCloudChannel = {
       }
 
       if (mediaUrl) {
-        const result = await sendMedia(config, to, "image", { link: mediaUrl, caption: text || undefined }, log);
+        // Same logic as the inbound deliver callback: HTTP(S) URLs use
+        // {link} (Meta fetches them); local filesystem paths must be
+        // uploaded to /media first to obtain a media_id, then sent via
+        // {id}. Otherwise Meta rejects with "(#100) Param image.link is
+        // not a valid URI".
+        const mediaArg = isHttpUrl(mediaUrl)
+          ? { link: mediaUrl, caption: text || undefined }
+          : {
+              id: await uploadMediaFromPath(config, mediaUrl, guessMimeFromPath(mediaUrl), log),
+              caption: text || undefined,
+            };
+        const result = await sendMedia(config, to, "image", mediaArg, log);
         if (!result.ok) {
           throw new Error(`WhatsApp Cloud API media send failed: ${result.error}`);
         }
